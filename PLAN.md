@@ -475,3 +475,27 @@ in this repo. It proxies `localhost:3000` → `localhost:80`. You still need a t
 [ ] Phase 5: Meta webhook registered and verified
 [ ] Phase 6: End-to-end WhatsApp message test passes
 ```
+
+---
+
+## 15. Extended Features (Personal Cloud + Local AI + Portfolio)
+
+This PLAN.md covers the base local deployment of the 1DotDev bridge only.
+Three additional feature plans live in `features/`:
+
+| Feature | Plan file | Summary |
+|---|---|---|
+| Architecture overview | `features/INTEGRATION-ARCHITECTURE.md` | Full port map, service topology, data flows |
+| Feature 1 | `features/1-personal-cloud.md` | Immich (photos), Jellyfin (videos), Calibre-Web (books), WhatsApp commands |
+| Feature 2 | `features/2-local-models.md` | Ollama local LLMs, bridge integration, `/ask` RAG via chromadb-orm |
+| Feature 3 | `features/3-portfolio.md` | Next.js portfolio website, HuggingFace Spaces demos, project showcase |
+
+**Suggested build order:**
+1. Complete this PLAN.md checklist first (get the bridge running locally)
+2. Feature 1: Personal cloud (Docker Compose, ~2 hours)
+3. Feature 2: Local models (Ollama + code changes to bridge, ~1 day)
+4. Feature 3: Portfolio (Next.js + HF Spaces deployments, ~3–5 days)
+
+Infrastructure for all features is in `infra/`:
+- `infra/docker-compose.yml` — all Docker services (Immich, Jellyfin, Calibre-Web, ChromaDB)
+- `infra/pm2.config.cjs` — PM2 processes (bridge, portfolio, chromadb-orm, Ollama)
