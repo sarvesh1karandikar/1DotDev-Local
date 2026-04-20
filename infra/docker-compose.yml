@@ -127,8 +127,126 @@ services:
     #           capabilities: [gpu]
     restart: unless-stopped
 
+  # ─── arr stack — Automated media management ──────────────────────────────
+
+  # Prowlarr — Indexer manager for all arr apps
+  prowlarr:
+    image: linuxserver/prowlarr:latest
+    container_name: prowlarr
+    ports:
+      - "9696:9696"
+    volumes:
+      - prowlarr-config:/config
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Los_Angeles
+    restart: unless-stopped
+
+  # Sonarr — TV series management
+  sonarr:
+    image: linuxserver/sonarr:latest
+    container_name: sonarr
+    ports:
+      - "8989:8989"
+    volumes:
+      - sonarr-config:/config
+      - "${HOME}/media/tv:/tv"
+      - "${HOME}/media/downloads:/downloads"
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Los_Angeles
+    depends_on:
+      - qbittorrent
+    restart: unless-stopped
+
+  # Radarr — Movie management
+  radarr:
+    image: linuxserver/radarr:latest
+    container_name: radarr
+    ports:
+      - "7878:7878"
+    volumes:
+      - radarr-config:/config
+      - "${HOME}/media/movies:/movies"
+      - "${HOME}/media/downloads:/downloads"
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Los_Angeles
+    depends_on:
+      - qbittorrent
+    restart: unless-stopped
+
+  # Lidarr — Music management
+  lidarr:
+    image: linuxserver/lidarr:latest
+    container_name: lidarr
+    ports:
+      - "8686:8686"
+    volumes:
+      - lidarr-config:/config
+      - "${HOME}/media/music:/music"
+      - "${HOME}/media/downloads:/downloads"
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Los_Angeles
+    depends_on:
+      - qbittorrent
+    restart: unless-stopped
+
+  # qBittorrent — Torrent client for downloads
+  # ─── NordVPN — Community maintained VPN container (bubuntux) ──────────────
+  nordvpn:
+    image: bubuntux/nordvpn:latest
+    container_name: nordvpn
+    ports:
+      - "8080:8080"      # qBittorrent web UI
+      - "6881:6881"      # qBittorrent torrent port
+      - "6881:6881/udp"
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+    environment:
+      - TOKEN=${NORD_VPN_TOKEN}
+      - PROTOCOL=udp
+      - COUNTRY=United States
+      - OBFUSCATE=off
+    restart: unless-stopped
+
+  qbittorrent:
+    image: linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: "container:nordvpn"  # Route all traffic through NordVPN
+    volumes:
+      - qbittorrent-config:/config
+      - "${HOME}/media/downloads:/downloads"
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Los_Angeles
+      - WEBUI_PORT=8080
+    depends_on:
+      - nordvpn
+    restart: unless-stopped
+
 volumes:
   immich-ml-cache:
   calibre-web-config:
   jellyfin-config:
   jellyfin-cache:
+  prowlarr-config:
+  sonarr-config:
+  radarr-config:
+  lidarr-config:
+  qbittorrent-config:

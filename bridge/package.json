@@ -1,0 +1,20 @@
+{
+  "name": "openclaw-media-bridge",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "description": "WhatsApp + Claude bridge for media management via arr stack",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.0",
+    "axios": "^1.7.0",
+    "better-sqlite3": "^12.9.0",
+    "chrono-node": "^2.9.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0",
+    "fast-xml-parser": "^4.4.0",
+    "node-cron": "^3.0.3"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}
