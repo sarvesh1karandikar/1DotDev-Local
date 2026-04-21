@@ -10,6 +10,7 @@ import { sendText as sendWhatsApp } from "./lib/whatsapp.js";
 import { start as startScheduler } from "./lib/scheduler.js";
 import { routeMessage } from "./lib/router.js";
 import { analyzeQuery, MODEL_EXECUTORS } from "./lib/router-analyzer.js";
+import { classifyIntent } from "./lib/intent-classifier.js";
 import { commands, byName } from "./commands/index.js";
 
 const {
@@ -83,28 +84,43 @@ async function handleCommand(text, ctx) {
 }
 
 function toolToCommand(toolName, input) {
+  // Handle both AI router format (with structured properties) and intent classifier format (args string)
   if (toolName === "search_web") {
-    return { cmdName: "web-search", args: input.query, prefix: "🔍" };
+    return { cmdName: "web-search", args: input.query || input.args || "", prefix: "🔍" };
   }
   switch (toolName) {
     case "add_series":
-      return { cmdName: "add-series", args: input.title, prefix: "📺" };
+      return { cmdName: "add-series", args: input.title || input.args || "", prefix: "📺" };
     case "add_movie":
-      return { cmdName: "add-movie", args: input.title, prefix: "🎬" };
+      return { cmdName: "add-movie", args: input.title || input.args || "", prefix: "🎬" };
     case "search_series":
-      return { cmdName: "search-series", args: input.query, prefix: "🔍" };
+      return { cmdName: "search-series", args: input.query || input.args || "", prefix: "🔍" };
     case "search_movie":
-      return { cmdName: "search-movie", args: input.query, prefix: "🔍" };
+      return { cmdName: "search-movie", args: input.query || input.args || "", prefix: "🔍" };
     case "media_status":
       return { cmdName: "media-status", args: "", prefix: "📊" };
     case "remind":
-      return { cmdName: "remind", args: `${input.when} ${input.text}`.trim(), prefix: "⏱" };
+      return { cmdName: "remind", args: input.args || `${input.when} ${input.text}`.trim(), prefix: "⏱" };
     case "todo_add":
-      return { cmdName: "todo", args: `add ${input.text}`, prefix: "✅" };
+      return { cmdName: "todo", args: `add ${input.text || input.args}`.trim(), prefix: "✅" };
     case "todo_list":
       return { cmdName: "todo", args: "list", prefix: "📋" };
     case "todo_done":
-      return { cmdName: "todo", args: `done ${input.index}`, prefix: "✅" };
+      return { cmdName: "todo", args: `done ${input.index || input.args}`.trim(), prefix: "✅" };
+    case "reminders_list":
+      return { cmdName: "reminders", args: "", prefix: "📋" };
+    case "digest_add":
+      return { cmdName: "digest", args: `add ${input.topic || input.args}`.trim(), prefix: "📰" };
+    case "digest_remove":
+      return { cmdName: "digest", args: `remove ${input.index || input.args}`.trim(), prefix: "📰" };
+    case "digest_now":
+      return { cmdName: "digest", args: "now", prefix: "📰" };
+    case "digest_status":
+      return { cmdName: "digest", args: "status", prefix: "📰" };
+    case "reset":
+      return { cmdName: "reset", args: "", prefix: "🔄" };
+    case "time":
+      return { cmdName: "time", args: "", prefix: "🕐" };
     default:
       return null;
   }
@@ -142,6 +158,32 @@ app.post("/webhook", async (req, res) => {
         console.log("cmd out:", from, reply.slice(0, 80));
       }
       return;
+    }
+
+    // Try pattern-based intent classification first (fast, high confidence)
+    const intentMatch = classifyIntent(text);
+    if (intentMatch && intentMatch.confidence >= 0.6) {
+      console.log(`intent match: ${from} tool=${intentMatch.toolName} confidence=${intentMatch.confidence.toFixed(2)} args="${intentMatch.args}"`);
+      try {
+        const mapping = toolToCommand(intentMatch.toolName, {
+          query: intentMatch.args,
+          title: intentMatch.args,
+          text: intentMatch.args,
+          topic: intentMatch.args,
+          when: intentMatch.args.split(/\s+/)[0],
+          ...(intentMatch.toolName === "todo_done" ? { index: parseInt(intentMatch.args) } : {}),
+          ...(intentMatch.toolName === "remind" ? { when: intentMatch.args.split(/\s+/)[0], text: intentMatch.args.split(/\s+/).slice(1).join(" ") } : {}),
+        });
+        if (mapping) {
+          const out = await runCommand(mapping.cmdName, mapping.args, { from, user, isAdmin });
+          const reply = `${mapping.prefix} ${out}`;
+          await sendWhatsApp(from, reply);
+          console.log("intent out:", from, reply.slice(0, 80));
+          return;
+        }
+      } catch (e) {
+        console.warn("intent routing failed, falling through to AI router:", e.message);
+      }
     }
 
     // Analyze message for intelligent routing
