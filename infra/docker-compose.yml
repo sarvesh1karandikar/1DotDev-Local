@@ -1,107 +1,12 @@
 version: "3.8"
 
-# Personal cloud services + ChromaDB vector store
+# Personal cloud services: Jellyfin, arr-stack (Sonarr/Radarr), qBittorrent+VPN
 # Run: docker compose up -d
 # Media paths assume ~/media exists (adjust MEDIA_ROOT if needed)
 
 x-media-root: &media-root "${HOME}/media"
 
 services:
-
-  # ─── ChromaDB — Vector store for RAG ──────────────────────────────────────
-  chromadb:
-    image: chromadb/chroma:latest
-    container_name: chromadb
-    ports:
-      - "8000:8000"
-    volumes:
-      - "${HOME}/media/chroma-data:/chroma/chroma"
-    environment:
-      - CHROMA_SERVER_AUTHN_CREDENTIALS_FILE=""
-      - CHROMA_SERVER_AUTHN_PROVIDER=""
-      - IS_PERSISTENT=TRUE
-      - PERSIST_DIRECTORY=/chroma/chroma
-    restart: unless-stopped
-
-  # ─── Immich — Photo & Video backup (Google Photos replacement) ────────────
-  immich-server:
-    image: ghcr.io/immich-app/immich-server:release
-    container_name: immich-server
-    command: ["start.sh", "immich"]
-    ports:
-      - "2283:3001"
-    volumes:
-      - "${HOME}/media/photos:/usr/src/app/upload"
-      - /etc/localtime:/etc/localtime:ro
-    environment:
-      - DB_HOSTNAME=immich-postgres
-      - DB_PORT=5432
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=immich_pass
-      - DB_DATABASE_NAME=immich
-      - REDIS_HOSTNAME=immich-redis
-    depends_on:
-      - immich-redis
-      - immich-postgres
-    restart: unless-stopped
-
-  immich-microservices:
-    image: ghcr.io/immich-app/immich-server:release
-    container_name: immich-microservices
-    command: ["start.sh", "microservices"]
-    volumes:
-      - "${HOME}/media/photos:/usr/src/app/upload"
-      - /etc/localtime:/etc/localtime:ro
-    environment:
-      - DB_HOSTNAME=immich-postgres
-      - DB_PORT=5432
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=immich_pass
-      - DB_DATABASE_NAME=immich
-      - REDIS_HOSTNAME=immich-redis
-    depends_on:
-      - immich-redis
-      - immich-postgres
-    restart: unless-stopped
-
-  immich-machine-learning:
-    image: ghcr.io/immich-app/immich-machine-learning:release
-    container_name: immich-machine-learning
-    volumes:
-      - immich-ml-cache:/cache
-    restart: unless-stopped
-
-  immich-redis:
-    image: redis:6.2-alpine
-    container_name: immich-redis
-    restart: unless-stopped
-
-  immich-postgres:
-    image: postgres:14-alpine
-    container_name: immich-postgres
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=immich_pass
-      - POSTGRES_DB=immich
-    volumes:
-      - "${HOME}/media/immich-db:/var/lib/postgresql/data"
-    restart: unless-stopped
-
-  # ─── Calibre-Web — Book library (Kindle/Goodreads replacement) ────────────
-  calibre-web:
-    image: linuxserver/calibre-web:latest
-    container_name: calibre-web
-    ports:
-      - "8083:8083"
-    volumes:
-      - "${HOME}/media/books:/books"
-      - calibre-web-config:/config
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=America/Los_Angeles
-      - DOCKER_MODS=linuxserver/mods:universal-calibre  # enables Calibre CLI for conversions
-    restart: unless-stopped
 
   # ─── Jellyfin — Video streaming (Netflix replacement) ─────────────────────
   jellyfin:
@@ -182,25 +87,6 @@ services:
       - qbittorrent
     restart: unless-stopped
 
-  # Lidarr — Music management
-  lidarr:
-    image: linuxserver/lidarr:latest
-    container_name: lidarr
-    ports:
-      - "8686:8686"
-    volumes:
-      - lidarr-config:/config
-      - "${HOME}/media/music:/music"
-      - "${HOME}/media/downloads:/downloads"
-      - /etc/localtime:/etc/localtime:ro
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=America/Los_Angeles
-    depends_on:
-      - qbittorrent
-    restart: unless-stopped
-
   # qBittorrent — Torrent client for downloads
   # ─── NordVPN — Community maintained VPN container (bubuntux) ──────────────
   nordvpn:
@@ -241,12 +127,9 @@ services:
     restart: unless-stopped
 
 volumes:
-  immich-ml-cache:
-  calibre-web-config:
   jellyfin-config:
   jellyfin-cache:
   prowlarr-config:
   sonarr-config:
   radarr-config:
-  lidarr-config:
   qbittorrent-config:
