@@ -16,6 +16,76 @@ const headers = (apiKey) => ({
   "Content-Type": "application/json",
 });
 
+/**
+ * Fetch available quality profiles from Sonarr or Radarr
+ * @param {string} arrUrl - The arr stack URL (e.g., http://localhost:8989)
+ * @param {string} apiKey - The arr stack API key
+ * @param {string} arrType - Either "sonarr" or "radarr"
+ * @returns {Promise<Array>} Array of quality profile objects with id and name
+ */
+export async function getQualityProfiles(arrUrl, apiKey, arrType) {
+  try {
+    const res = await axios.get(`${arrUrl}/api/v3/qualityprofile`, {
+      headers: headers(apiKey),
+      timeout: 10000,
+    });
+
+    if (!Array.isArray(res.data) || res.data.length === 0) {
+      throw new Error(`No quality profiles found in ${arrType}`);
+    }
+
+    return res.data.map(profile => ({
+      id: profile.id,
+      name: profile.name,
+    }));
+  } catch (e) {
+    if (e.response?.status === 401) {
+      throw new Error(`${arrType} API authentication failed: Invalid API key`);
+    }
+    if (e.response?.status === 404) {
+      throw new Error(`${arrType} quality profile endpoint not found: ${arrUrl}/api/v3/qualityprofile`);
+    }
+    throw new Error(
+      `Failed to fetch ${arrType} quality profiles: ${e.response?.data?.message || e.message}`
+    );
+  }
+}
+
+/**
+ * Fetch available root folders from Sonarr or Radarr
+ * @param {string} arrUrl - The arr stack URL (e.g., http://localhost:8989)
+ * @param {string} apiKey - The arr stack API key
+ * @param {string} arrType - Either "sonarr" or "radarr"
+ * @returns {Promise<Array>} Array of root folder objects with path and freeSpace
+ */
+export async function getRootFolders(arrUrl, apiKey, arrType) {
+  try {
+    const res = await axios.get(`${arrUrl}/api/v3/rootfolder`, {
+      headers: headers(apiKey),
+      timeout: 10000,
+    });
+
+    if (!Array.isArray(res.data) || res.data.length === 0) {
+      throw new Error(`No root folders configured in ${arrType}`);
+    }
+
+    return res.data.map(folder => ({
+      path: folder.path,
+      freeSpace: folder.freeSpace,
+    }));
+  } catch (e) {
+    if (e.response?.status === 401) {
+      throw new Error(`${arrType} API authentication failed: Invalid API key`);
+    }
+    if (e.response?.status === 404) {
+      throw new Error(`${arrType} root folder endpoint not found: ${arrUrl}/api/v3/rootfolder`);
+    }
+    throw new Error(
+      `Failed to fetch ${arrType} root folders: ${e.response?.data?.message || e.message}`
+    );
+  }
+}
+
 export async function searchSeries(query) {
   try {
     const res = await axios.get(`${SONARR_URL}/api/v3/series/lookup`, {
@@ -36,9 +106,21 @@ export async function searchSeries(query) {
 
 export async function addSeries(tvdbId, folder = "/media/tv", monitored = true) {
   try {
+    // Fetch available quality profiles from Sonarr
+    let qualityProfileId;
+    try {
+      const profiles = await getQualityProfiles(SONARR_URL, SONARR_API_KEY, "Sonarr");
+      qualityProfileId = profiles[0].id;
+    } catch (profileError) {
+      throw new Error(
+        `Cannot add series - Quality profile fetch failed: ${profileError.message}. ` +
+        `Please ensure at least one quality profile is configured in Sonarr.`
+      );
+    }
+
     const res = await axios.post(`${SONARR_URL}/api/v3/series`, {
       tvdbId,
-      qualityProfileId: 1,
+      qualityProfileId,
       rootFolderPath: folder,
       monitored,
       addOptions: { searchForMissingEpisodes: true },
@@ -69,9 +151,21 @@ export async function searchMovie(query) {
 
 export async function addMovie(tmdbId, folder = "/media/movies", monitored = true) {
   try {
+    // Fetch available quality profiles from Radarr
+    let qualityProfileId;
+    try {
+      const profiles = await getQualityProfiles(RADARR_URL, RADARR_API_KEY, "Radarr");
+      qualityProfileId = profiles[0].id;
+    } catch (profileError) {
+      throw new Error(
+        `Cannot add movie - Quality profile fetch failed: ${profileError.message}. ` +
+        `Please ensure at least one quality profile is configured in Radarr.`
+      );
+    }
+
     const res = await axios.post(`${RADARR_URL}/api/v3/movie`, {
       tmdbId,
-      qualityProfileId: 1,
+      qualityProfileId,
       rootFolderPath: folder,
       monitored,
       addOptions: { searchForMovie: true },
