@@ -6,7 +6,8 @@ import { createClient, logUsage } from "./lib/anthropic.js";
 import { ensureUser } from "./lib/users.js";
 import { appendMessage, recentMessages, listFacts } from "./lib/state.js";
 import { WELCOME_MESSAGE, isGreeted, markGreeted } from "./lib/welcome.js";
-import { sendText as sendWhatsApp } from "./lib/whatsapp.js";
+import { sendText as sendWhatsApp, downloadMedia } from "./lib/whatsapp.js";
+import { transcribe } from "./lib/transcribe.js";
 import { start as startScheduler } from "./lib/scheduler.js";
 import { routeMessage } from "./lib/router.js";
 import { analyzeQuery, MODEL_EXECUTORS } from "./lib/router-analyzer.js";
@@ -132,9 +133,27 @@ app.post("/webhook", async (req, res) => {
   try {
     const entry = req.body.entry?.[0]?.changes?.[0]?.value;
     const msg = entry?.messages?.[0];
-    if (!msg || msg.type !== "text") return;
+    if (!msg || (msg.type !== "text" && msg.type !== "audio")) return;
     const from = msg.from;
-    const text = msg.text.body;
+    let text;
+    if (msg.type === "audio") {
+      try {
+        const { buffer, mimeType } = await downloadMedia(msg.audio.id);
+        text = await transcribe(buffer, mimeType);
+        if (!text || !text.trim()) {
+          await sendWhatsApp(from, "I couldn't understand that voice message. Could you try again or type it out?");
+          return;
+        }
+        text = text.trim();
+        console.log("transcribed:", from, text.slice(0, 80));
+      } catch (e) {
+        console.error("transcription error:", e.message);
+        await sendWhatsApp(from, "Sorry, I couldn't process that voice message right now.");
+        return;
+      }
+    } else {
+      text = msg.text.body;
+    }
 
     if (!allowlist.has(from)) {
       console.log("dropped (not allowlisted):", from);

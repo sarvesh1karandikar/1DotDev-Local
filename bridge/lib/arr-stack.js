@@ -1,4 +1,8 @@
 import axios from "axios";
+import { TTLCache } from "./cache.js";
+
+const seriesCache = new TTLCache();
+const movieCache = new TTLCache();
 
 const {
   SONARR_URL = "http://localhost:8989",
@@ -87,18 +91,23 @@ export async function getRootFolders(arrUrl, apiKey, arrType) {
 }
 
 export async function searchSeries(query) {
+  const key = query.trim().toLowerCase();
+  const cached = seriesCache.get(key);
+  if (cached) return cached;
   try {
     const res = await axios.get(`${SONARR_URL}/api/v3/series/lookup`, {
       params: { term: query },
       headers: headers(SONARR_API_KEY),
       timeout: 10000,
     });
-    return res.data.slice(0, 5).map(s => ({
+    const results = res.data.slice(0, 5).map(s => ({
       title: s.title,
       tvdbId: s.tvdbId,
       year: s.year,
       overview: s.overview?.slice(0, 100),
     }));
+    seriesCache.set(key, results);
+    return results;
   } catch (e) {
     throw new Error(`Sonarr search failed: ${e.message}`);
   }
@@ -132,18 +141,23 @@ export async function addSeries(tvdbId, folder = "/media/tv", monitored = true) 
 }
 
 export async function searchMovie(query) {
+  const key = query.trim().toLowerCase();
+  const cached = movieCache.get(key);
+  if (cached) return cached;
   try {
     const res = await axios.get(`${RADARR_URL}/api/v3/search`, {
       params: { term: query },
       headers: headers(RADARR_API_KEY),
       timeout: 10000,
     });
-    return res.data.slice(0, 5).map(m => ({
+    const results = res.data.slice(0, 5).map(m => ({
       title: m.title,
       tmdbId: m.tmdbId,
       year: m.year,
       overview: m.overview?.slice(0, 100),
     }));
+    movieCache.set(key, results);
+    return results;
   } catch (e) {
     throw new Error(`Radarr search failed: ${e.message}`);
   }
@@ -212,4 +226,35 @@ export async function radarrStatus() {
   } catch (e) {
     throw new Error(`Radarr status failed: ${e.message}`);
   }
+}
+
+async function getRecentHistory(arrUrl, apiKey, source) {
+  try {
+    const res = await axios.get(`${arrUrl}/api/v3/history`, {
+      params: { page: 1, pageSize: 20, sortKey: "date", sortDirection: "descending" },
+      headers: headers(apiKey),
+      timeout: 10000,
+    });
+    const cutoff = Date.now() - 10 * 60 * 1000;
+    const records = (res.data.records || res.data || []);
+    return records
+      .filter((r) => r.eventType === "downloadFolderImported" && new Date(r.date).getTime() > cutoff)
+      .map((r) => ({
+        id: String(r.id),
+        title: r.sourceTitle || r.series?.title || r.movie?.title || "Unknown",
+        date: r.date,
+        source,
+      }));
+  } catch (e) {
+    console.error(`${source} history fetch failed:`, e.message);
+    return [];
+  }
+}
+
+export async function getCompletedDownloads() {
+  const [sonarr, radarr] = await Promise.all([
+    getRecentHistory(SONARR_URL, SONARR_API_KEY, "sonarr"),
+    getRecentHistory(RADARR_URL, RADARR_API_KEY, "radarr"),
+  ]);
+  return [...sonarr, ...radarr];
 }

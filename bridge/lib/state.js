@@ -150,3 +150,23 @@ export function markTodoDone(number, index) {
 export function clearTodos(number) {
   return db.prepare("DELETE FROM todos WHERE number = ?").run(number).changes;
 }
+
+// --- Download Notifications ---
+
+export function isAlreadyNotified(source, downloadId) {
+  return !!db.prepare(
+    "SELECT 1 FROM notified_downloads WHERE source = ? AND download_id = ?"
+  ).get(source, downloadId);
+}
+
+export function markNotified(source, downloadId, title) {
+  db.prepare(
+    "INSERT OR IGNORE INTO notified_downloads (source, download_id, title, notified_at) VALUES (?, ?, ?, ?)"
+  ).run(source, downloadId, title, Date.now());
+}
+
+export function cleanOldNotifications(olderThanMs) {
+  return db.prepare(
+    "DELETE FROM notified_downloads WHERE notified_at < ?"
+  ).run(Date.now() - olderThanMs).changes;
+}

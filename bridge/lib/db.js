@@ -80,6 +80,16 @@ CREATE TABLE IF NOT EXISTS digest_subscriptions (
   last_sent_at INTEGER,
   created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS notified_downloads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT NOT NULL,
+  download_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  notified_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notified_source_id
+  ON notified_downloads(source, download_id);
 `);
 
 export default db;
